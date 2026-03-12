@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>שליחת קודים - BarberShop</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; background: #f8f6f1; direction: rtl; }
+    h1 { color: #1a1a1a; margin-bottom: 8px; }
+    .sub { color: #6b6b6b; margin-bottom: 24px; font-size: 14px; }
+    .card { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .phone { font-weight: 700; font-size: 18px; color: #1a1a1a; }
+    .code { font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #c9a227; margin: 12px 0; }
+    .time { font-size: 12px; color: #999; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .btn-whatsapp { background: #25D366; color: #fff; }
+    .btn-whatsapp:hover { background: #20bd5a; }
+    .empty { text-align: center; color: #999; padding: 40px; }
+    .setup { background: #fff3cd; border: 2px solid #ffc107; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+    .setup input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; font-family: monospace; }
+    .setup button { background: #c9a227; color: #fff; padding: 12px 24px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>שליחת קודי התחברות</h1>
+  <p class="sub">כשלקוח מבקש קוד באפליקציה, הבקשה תופיע כאן.<br>
+  <strong>חשוב:</strong> השאירו דף זה פתוח (מחשב/טאבלט במספרה). לחצו "שלח ב-WhatsApp" ושליחו את ההודעה ללקוח.</p>
+
+  <div id="setup" class="setup" style="display:none;">
+    <h3>הגדרה ראשונה – חיבור ל-Supabase</h3>
+    <p style="margin: 0 0 12px 0; font-size: 14px;">היכנס ל-Supabase Dashboard → Settings → API והעתק:</p>
+    <input id="supabaseUrl" type="text" placeholder="https://kslkxelfyrjuxdrnqhbl.supabase.co">
+    <input id="supabaseKey" type="text" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzbGt4ZWxmeXJqdXhkcm5xaGJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTUzNzYsImV4cCI6MjA4NjU3MTM3Nn0.297vKycqAsyt72sPUkVBiQoloKtGlBMTbR1-z46sftE">
+    <button onclick="saveConfig()">שמור והפעל</button>
+  </div>
+
+  <div class="setup" style="background:#e8f5e9; border-color:#4caf50; margin-bottom:24px;">
+    <h3 style="margin-top:0;">איך זה עובד?</h3>
+    <ol style="margin:0; padding-right:20px; line-height:1.8;">
+      <li><strong>אוטומטי:</strong> אם הגדרת Whapi (ראה WHATSAPP_AUTO_SETUP.md) – הקוד נשלח אוטומטית ללקוח</li>
+      <li><strong>ידני:</strong> אם לא – השאר דף זה פתוח. כשלקוח מבקש קוד, תופיע הבקשה כאן</li>
+      <li>לחץ "שלח ב-WhatsApp" ושליחו את ההודעה ללקוח</li>
+    </ol>
+  </div>
+
+  <div id="requests"></div>
+
+  <script>
+    let supabase;
+    let sub;
+
+    function loadConfig() {
+      const url = localStorage.getItem('supabase_url');
+      const key = localStorage.getItem('supabase_key');
+      if (!url || !key) {
+        document.getElementById('setup').style.display = 'block';
+        return false;
+      }
+      supabase = window.supabase.createClient(url, key);
+      return true;
+    }
+
+    function saveConfig() {
+      const url = document.getElementById('supabaseUrl').value.trim();
+      const key = document.getElementById('supabaseKey').value.trim();
+      if (!url || !key) return alert('נא להזין URL ו-Key');
+      localStorage.setItem('supabase_url', url);
+      localStorage.setItem('supabase_key', key);
+      document.getElementById('setup').style.display = 'none';
+      init();
+    }
+
+    function phoneToWhatsApp(phone) {
+      const p = String(phone).replace(/\D/g, '');
+      if (p.startsWith('0')) return '972' + p.slice(1);
+      if (p.startsWith('972')) return p;
+      return '972' + p;
+    }
+
+    function renderRequests(rows) {
+      const el = document.getElementById('requests');
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<div class="empty">אין בקשות ממתינות. בקשות חדשות יופיעו כאן.</div>';
+        return;
+      }
+      const recent = rows.filter(r => {
+        const d = new Date(r.created_at);
+        return (Date.now() - d) < 10 * 60 * 1000;
+      }).slice(0, 20);
+      el.innerHTML = recent.map(r => {
+        const waNum = phoneToWhatsApp(r.phone);
+        const msg = encodeURIComponent(`קוד ההתחברות לאפליקציה BarberShop: ${r.code}`);
+        const link = `https://wa.me/${waNum}?text=${msg}`;
+        const time = new Date(r.created_at).toLocaleTimeString('he-IL');
+        return `<div class="card">
+          <div class="card-header">
+            <span class="phone">${r.phone}</span>
+            <span class="time">${time}</span>
+          </div>
+          <div class="code">${r.code}</div>
+          <a class="btn btn-whatsapp" href="${link}" target="_blank">📱 שלח ב-WhatsApp</a>
+        </div>`;
+      }).join('');
+    }
+
+    async function fetchRequests() {
+      if (!supabase) return;
+      const { data } = await supabase
+        .from('otp_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30);
+      renderRequests(data || []);
+    }
+
+    function init() {
+      if (!loadConfig()) return;
+      fetchRequests();
+      if (sub) sub.unsubscribe();
+      try {
+        sub = supabase.channel('otp_requests').on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'otp_requests'
+        }, () => fetchRequests()).subscribe();
+      } catch (e) {}
+      setInterval(fetchRequests, 5000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

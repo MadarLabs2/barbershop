@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>דשבורד מנהל - BarberShop</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background: #f8f6f1; direction: rtl; }
+    h1 { color: #1a1a1a; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab { background: #fff; border: 2px solid #e8e4dc; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    .tab.active { background: #c9a227; color: #fff; border-color: #c9a227; }
+    .tab:hover:not(.active) { background: #f5f5f5; }
+    .setup { background: #fff3cd; border: 2px solid #ffc107; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+    .setup input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; }
+    .setup button { background: #c9a227; color: #fff; padding: 12px 24px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; }
+    .day-section { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+    .day-title { font-size: 18px; font-weight: 700; color: #1a1a1a; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e8e4dc; }
+    .apt-card { margin-bottom: 8px; border-radius: 12px; overflow: hidden; background: #f8f6f1; }
+    .apt-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; cursor: pointer; }
+    .apt-header:hover { background: #eee; }
+    .apt-time { font-weight: 700; color: #1a1a1a; }
+    .apt-name { color: #333; }
+    .apt-detail { padding: 16px; background: #fff; border-top: 1px solid #e8e4dc; }
+    .apt-detail a { color: #c9a227; font-weight: 600; text-decoration: none; }
+    .apt-detail a:hover { text-decoration: underline; }
+    .empty { color: #999; text-align: center; padding: 40px; }
+    .refresh { background: #c9a227; color: #fff; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; margin-bottom: 20px; }
+    .panel { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+    .panel h3 { margin: 0 0 16px; color: #1a1a1a; }
+    .form-row { margin-bottom: 12px; }
+    .form-row label { display: block; margin-bottom: 4px; font-weight: 600; }
+    .form-row input, .form-row select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+    .btn { background: #c9a227; color: #fff; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    .btn-small { padding: 6px 12px; font-size: 14px; }
+    .list-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+    .list-item:last-child { border-bottom: none; }
+    .rest-day { display: inline-block; margin: 2px; padding: 4px 8px; background: #f0f0f0; border-radius: 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>דשבורד מנהל – BarberShop</h1>
+  <div id="setup" class="setup" style="display:none;">
+    <h3>הגדרת Supabase</h3>
+    <input id="supabaseUrl" type="text" placeholder="Project URL">
+    <input id="supabaseKey" type="text" placeholder="anon key">
+    <button onclick="saveConfig()">שמור</button>
+  </div>
+
+  <div class="tabs">
+    <span class="tab active" data-tab="appointments" onclick="showTab('appointments')">התורים</span>
+    <span class="tab" data-tab="branches" onclick="showTab('branches')">סניפים</span>
+    <span class="tab" data-tab="services" onclick="showTab('services')">שירותים</span>
+    <span class="tab" data-tab="team" onclick="showTab('team')">צוות לפי סניף</span>
+    <span class="tab" data-tab="rest" onclick="showTab('rest')">ימי מנוחה</span>
+    <span class="tab" data-tab="admins" onclick="showTab('admins')">אדמינים</span>
+  </div>
+
+  <div id="tab-appointments">
+    <button class="refresh" onclick="loadAppointments()">רענן</button>
+    <div id="content"></div>
+  </div>
+
+  <div id="tab-branches" style="display:none;">
+    <div class="panel">
+      <h3>הוספת סניף</h3>
+      <div class="form-row">
+        <label>שם הסניף</label>
+        <input id="branchName" type="text" placeholder="לדוגמה: דיר אל אסד">
+      </div>
+      <div class="form-row">
+        <label>כתובת</label>
+        <input id="branchAddress" type="text" placeholder="כתובת מלאה">
+      </div>
+      <button class="btn" onclick="addBranch()">הוסף סניף</button>
+    </div>
+    <div class="panel">
+      <h3>רשימת סניפים</h3>
+      <div id="branchesList"></div>
+    </div>
+  </div>
+
+  <div id="tab-services" style="display:none;">
+    <div class="panel">
+      <h3>הוספת שירות</h3>
+      <div class="form-row">
+        <label>שם השירות</label>
+        <input id="newServiceName" type="text" placeholder="לדוגמה: תספורת">
+      </div>
+      <div class="form-row">
+        <label>מחיר (₪)</label>
+        <input id="newServicePrice" type="number" placeholder="60">
+      </div>
+      <div class="form-row">
+        <label>משך (דקות)</label>
+        <input id="newServiceDuration" type="number" placeholder="40">
+      </div>
+      <button class="btn" onclick="addService()">הוסף שירות</button>
+    </div>
+    <div class="panel">
+      <h3>שירותים קיימים – עדכון מחיר ומשך</h3>
+      <div id="servicesList"></div>
+    </div>
+  </div>
+
+  <div id="tab-team" style="display:none;">
+    <div class="panel">
+      <h3>הוספת איש צוות</h3>
+      <div class="form-row">
+        <label>שם איש הצוות</label>
+        <input id="newBarberName" type="text" placeholder="לדוגמה: מוחמד מוסא">
+      </div>
+      <button class="btn" onclick="addBarber()">הוסף איש צוות</button>
+    </div>
+    <div class="panel">
+      <h3>שיוך צוות לסניף</h3>
+      <div class="form-row">
+        <label>סניף</label>
+        <select id="teamBranch"></select>
+      </div>
+      <div class="form-row">
+        <label>איש צוות</label>
+        <select id="teamBarber"></select>
+      </div>
+      <button class="btn" onclick="addBranchBarber()">הוסף לסניף</button>
+    </div>
+    <div class="panel">
+      <h3>צוות לפי סניף</h3>
+      <div id="branchBarbersList"></div>
+    </div>
+  </div>
+
+  <div id="tab-rest" style="display:none;">
+    <div class="panel">
+      <h3>ימי מנוחה לפי איש צוות</h3>
+      <div class="form-row">
+        <label>איש צוות</label>
+        <select id="restBarber"></select>
+      </div>
+      <div class="form-row">
+        <label>יום מנוחה (0=ראשון, 6=שבת)</label>
+        <select id="restDay">
+          <option value="0">ראשון</option>
+          <option value="1">שני</option>
+          <option value="2">שלישי</option>
+          <option value="3">רביעי</option>
+          <option value="4">חמישי</option>
+          <option value="5">שישי</option>
+          <option value="6">שבת</option>
+        </select>
+      </div>
+      <button class="btn" onclick="addRestDay()">הוסף יום מנוחה</button>
+    </div>
+    <div class="panel">
+      <h3>ימי מנוחה קיימים</h3>
+      <div id="restDaysList"></div>
+    </div>
+  </div>
+
+  <div id="tab-admins" style="display:none;">
+    <div class="panel">
+      <h3>הפיכת משתמש לאדמין</h3>
+      <div class="form-row">
+        <label>מספר טלפון (כולל קידומת)</label>
+        <input id="adminPhone" type="tel" placeholder="0541234567">
+      </div>
+      <button class="btn" onclick="setAdmin()">הפוך לאדמין</button>
+    </div>
+    <div class="panel">
+      <h3>הסרת אדמין</h3>
+      <div class="form-row">
+        <label>מספר טלפון</label>
+        <input id="removeAdminPhone" type="tel" placeholder="0541234567">
+      </div>
+      <button class="btn" onclick="removeAdmin()">הסר אדמין</button>
+    </div>
+  </div>
+
+  <script>
+    let supabase;
+    const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+    function loadConfig() {
+      const url = localStorage.getItem('supabase_url');
+      const key = localStorage.getItem('supabase_key');
+      if (!url || !key) {
+        document.getElementById('setup').style.display = 'block';
+        return false;
+      }
+      supabase = window.supabase.createClient(url, key);
+      return true;
+    }
+
+    function saveConfig() {
+      const url = document.getElementById('supabaseUrl').value.trim();
+      const key = document.getElementById('supabaseKey').value.trim();
+      if (!url || !key) return alert('נא להזין URL ו-Key');
+      localStorage.setItem('supabase_url', url);
+      localStorage.setItem('supabase_key', key);
+      document.getElementById('setup').style.display = 'none';
+      load();
+    }
+
+    function showTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+      document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+      document.getElementById('tab-' + tab).style.display = 'block';
+      if (tab === 'appointments') loadAppointments();
+      if (tab === 'branches') loadBranches();
+      if (tab === 'services') loadServicesTab();
+      if (tab === 'team') loadTeamTab();
+      if (tab === 'rest') loadRestTab();
+    }
+
+    async function loadAppointments() {
+      if (!loadConfig()) return;
+      const { data } = await supabase.from('appointments').select('*').eq('status', 'confirmed').order('date', { ascending: true }).order('time', { ascending: true });
+      const byDate = {};
+      (data || []).forEach((apt) => {
+        const d = apt.date;
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(apt);
+      });
+      const sortedDates = Object.keys(byDate).sort();
+      const el = document.getElementById('content');
+      if (sortedDates.length === 0) {
+        el.innerHTML = '<div class="empty">אין תורים מאושרים</div>';
+        return;
+      }
+      el.innerHTML = sortedDates.map((dateStr) => {
+        const apts = byDate[dateStr];
+        const d = new Date(dateStr);
+        const dateLabel = d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const aptsHtml = apts.map((apt) => {
+          const time = typeof apt.time === 'string' ? apt.time.slice(0, 5) : apt.time;
+          const name = apt.client_name || 'לקוח';
+          const phone = apt.client_phone || '';
+          const tel = phone ? (phone.startsWith('0') ? '+972' + phone.replace(/\D/g, '').slice(1) : phone) : '';
+          const phoneLink = tel ? `<a href="tel:${tel}" dir="ltr">${phone}</a>` : '—';
+          const id = 'apt-' + apt.id;
+          return `<div class="apt-card"><div class="apt-header" onclick="document.getElementById('${id}').style.display = document.getElementById('${id}').style.display === 'none' ? 'block' : 'none'"><span><span class="apt-time">${time}</span> <span class="apt-name">${name}</span></span></div><div id="${id}" class="apt-detail" style="display:none;">טלפון: ${phoneLink}<br>טיפול: ${apt.service_name || ''} | ${apt.barber_name || ''} | ${apt.branch_name || ''}</div></div>`;
+        }).join('');
+        return `<div class="day-section"><div class="day-title">${dateLabel}</div>${aptsHtml}</div>`;
+      }).join('');
+    }
+
+    async function loadBranches() {
+      if (!loadConfig()) return;
+      const { data } = await supabase.from('branches').select('*').order('name');
+      const sel = document.getElementById('teamBranch');
+      sel.innerHTML = '<option value="">בחר סניף</option>' + (data || []).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      const list = document.getElementById('branchesList');
+      list.innerHTML = (data || []).length ? (data || []).map(b => `<div class="list-item">${b.name} ${b.address ? ' – ' + b.address : ''}</div>`).join('') : '<div class="empty">אין סניפים</div>';
+    }
+
+    async function addBranch() {
+      const name = document.getElementById('branchName').value.trim();
+      const address = document.getElementById('branchAddress').value.trim();
+      if (!name) return alert('נא להזין שם סניף');
+      const { error } = await supabase.from('branches').insert({ name, address: address || null });
+      if (error) return alert('שגיאה: ' + error.message);
+      document.getElementById('branchName').value = '';
+      document.getElementById('branchAddress').value = '';
+      loadBranches();
+    }
+
+    async function loadServicesTab() {
+      if (!loadConfig()) return;
+      const { data } = await supabase.from('services').select('*').order('name');
+      const list = document.getElementById('servicesList');
+      list.innerHTML = (data || []).map(s => `
+        <div class="list-item" style="flex-wrap:wrap;">
+          <div style="flex:1;min-width:120px;">
+            <strong>${s.name}</strong><br>
+            <input type="number" id="price-${s.id}" value="${s.price}" placeholder="מחיר" style="width:80px;padding:6px;margin:4px 8px 4px 0;"> ₪
+            <input type="number" id="dur-${s.id}" value="${s.duration}" placeholder="דקות" style="width:60px;padding:6px;margin:4px 0;"> דק׳
+          </div>
+          <button class="btn btn-small" onclick="updateService('${s.id}')">עדכן</button>
+        </div>
+      `).join('') || '<div class="empty">אין שירותים</div>';
+    }
+
+    async function addService() {
+      const name = document.getElementById('newServiceName').value.trim();
+      const price = parseInt(document.getElementById('newServicePrice').value, 10);
+      const duration = parseInt(document.getElementById('newServiceDuration').value, 10);
+      if (!name || isNaN(price) || isNaN(duration)) return alert('נא למלא את כל השדות');
+      const { error } = await supabase.from('services').insert({ name, price, duration });
+      if (error) return alert('שגיאה: ' + error.message);
+      document.getElementById('newServiceName').value = '';
+      document.getElementById('newServicePrice').value = '';
+      document.getElementById('newServiceDuration').value = '';
+      loadServicesTab();
+    }
+
+    async function addBarber() {
+      const name = document.getElementById('newBarberName').value.trim();
+      if (!name) return alert('נא להזין שם');
+      const { error } = await supabase.from('barbers').insert({ name });
+      if (error) return alert('שגיאה: ' + error.message);
+      document.getElementById('newBarberName').value = '';
+      loadTeamTab();
+    }
+
+    async function updateService(id) {
+      const price = parseInt(document.getElementById('price-' + id).value, 10);
+      const duration = parseInt(document.getElementById('dur-' + id).value, 10);
+      if (isNaN(price) || isNaN(duration)) return alert('נא להזין מחיר ומשך תקינים');
+      const { error } = await supabase.from('services').update({ price, duration }).eq('id', id);
+      if (error) return alert('שגיאה: ' + error.message);
+      alert('השירות עודכן בהצלחה');
+      loadServicesTab();
+    }
+
+    async function loadTeamTab() {
+      if (!loadConfig()) return;
+      const { data: branches } = await supabase.from('branches').select('*').order('name');
+      const { data: barbers } = await supabase.from('barbers').select('*').order('name');
+      const { data: bb } = await supabase.from('branch_barbers').select('*, branches(name), barbers(name)');
+      document.getElementById('teamBranch').innerHTML = '<option value="">בחר סניף</option>' + (branches || []).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      document.getElementById('teamBarber').innerHTML = '<option value="">בחר איש צוות</option>' + (barbers || []).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      const byBranch = {};
+      (bb || []).forEach(r => {
+        const bid = r.branch_id;
+        if (!byBranch[bid]) byBranch[bid] = [];
+        byBranch[bid].push({ id: r.id, barberName: r.barbers?.name || '' });
+      });
+      const branchNames = (branches || []).reduce((acc, b) => { acc[b.id] = b.name; return acc; }, {});
+      document.getElementById('branchBarbersList').innerHTML = Object.entries(byBranch).length ? Object.entries(byBranch).map(([bid, items]) => `<div class="day-section"><div class="day-title">${branchNames[bid] || bid}</div>${items.map(i => `<div class="list-item">${i.barberName} <button class="btn btn-small" onclick="removeBranchBarber('${i.id}')">הסר</button></div>`).join('')}</div>`).join('') : '<div class="empty">אין שיוכים</div>';
+    }
+
+    async function addBranchBarber() {
+      const branchId = document.getElementById('teamBranch').value;
+      const barberId = document.getElementById('teamBarber').value;
+      if (!branchId || !barberId) return alert('נא לבחור סניף ואיש צוות');
+      const { error } = await supabase.from('branch_barbers').insert({ branch_id: branchId, barber_id: barberId });
+      if (error) return alert('שגיאה: ' + error.message);
+      loadTeamTab();
+    }
+
+    async function removeBranchBarber(id) {
+      await supabase.from('branch_barbers').delete().eq('id', id);
+      loadTeamTab();
+    }
+
+    async function loadRestTab() {
+      if (!loadConfig()) return;
+      const { data: barbers } = await supabase.from('barbers').select('*').order('name');
+      const { data: rest } = await supabase.from('barber_rest_days').select('*, barbers(name)');
+      document.getElementById('restBarber').innerHTML = '<option value="">בחר איש צוות</option>' + (barbers || []).map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      const byBarber = {};
+      (rest || []).forEach(r => {
+        const bid = r.barber_id;
+        if (!byBarber[bid]) byBarber[bid] = [];
+        byBarber[bid].push({ id: r.id, day: r.day_of_week });
+      });
+      document.getElementById('restDaysList').innerHTML = Object.entries(byBarber).length ? Object.entries(byBarber).map(([bid, items]) => {
+        const barber = (barbers || []).find(b => b.id === bid);
+        return `<div class="day-section"><div class="day-title">${barber?.name || bid}</div>${items.map(i => `<span class="rest-day">${DAYS[i.day]} <button class="btn btn-small" type="button" onclick="removeRestDay('${i.id}')">הסר</button></span>`).join(' ')}</div>`;
+      }).join('') : '<div class="empty">אין ימי מנוחה</div>';
+    }
+
+    async function addRestDay() {
+      const barberId = document.getElementById('restBarber').value;
+      const day = parseInt(document.getElementById('restDay').value, 10);
+      if (!barberId) return alert('נא לבחור איש צוות');
+      const { error } = await supabase.from('barber_rest_days').insert({ barber_id: barberId, day_of_week: day });
+      if (error) return alert('שגיאה: ' + error.message);
+      loadRestTab();
+    }
+
+    async function removeRestDay(id) {
+      await supabase.from('barber_rest_days').delete().eq('id', id);
+      loadRestTab();
+    }
+
+    async function setAdmin() {
+      const phone = document.getElementById('adminPhone').value.replace(/\D/g, '');
+      if (!phone) return alert('נא להזין מספר טלפון');
+      const { error } = await supabase.from('app_users').update({ is_admin: true }).eq('phone', phone);
+      if (error) return alert('שגיאה: ' + error.message);
+      alert('המשתמש הוגדר כאדמין');
+      document.getElementById('adminPhone').value = '';
+    }
+
+    async function removeAdmin() {
+      const phone = document.getElementById('removeAdminPhone').value.replace(/\D/g, '');
+      if (!phone) return alert('נא להזין מספר טלפון');
+      const { error } = await supabase.from('app_users').update({ is_admin: false }).eq('phone', phone);
+      if (error) return alert('שגיאה: ' + error.message);
+      alert('האדמין הוסר');
+      document.getElementById('removeAdminPhone').value = '';
+    }
+
+    function load() {
+      loadAppointments();
+      loadBranches();
+    }
+
+    load();
+    setInterval(loadAppointments, 30000);
+  </script>
+</body>
+</html>
