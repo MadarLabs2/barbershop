@@ -84,6 +84,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const checkIfRegistered = async (phoneNumber) => {
+    try {
+      const digits = String(phoneNumber || '').replace(/\D/g, '');
+      if (!digits || digits.length < 9) return false;
+      const last9 = digits.slice(-9);
+      const variants = [digits, last9];
+      if (digits.startsWith('0') && digits.length === 10) variants.push(digits.slice(1));
+      else if (last9.length === 9 && !digits.startsWith('0')) variants.push('0' + last9);
+      if (digits.startsWith('972')) variants.push('0' + digits.slice(3));
+      const unique = [...new Set(variants)];
+      for (const p of unique) {
+        const { data } = await supabase.from('app_users').select('id').eq('phone', p).maybeSingle();
+        if (data) return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('checkIfRegistered:', e?.message);
+      return false;
+    }
+  };
+
   const login = async (phoneNumber, userData = null) => {
     try {
       const { data, error } = await supabase
@@ -107,6 +128,10 @@ export const AuthProvider = ({ children }) => {
         });
         return true;
       }
+
+      // Login only (from Login screen) – do NOT create new user; must be registered
+      const isLoginOnly = userData && userData.firstName === 'משתמש' && !userData.lastName && !userData.birthDate;
+      if (isLoginOnly) return false;
 
       if (userData) {
         const { data: inserted, error: insertErr } = await supabase
@@ -167,6 +192,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     logout,
+    checkIfRegistered,
   };
 
   return (

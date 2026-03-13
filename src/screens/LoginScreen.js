@@ -7,18 +7,40 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 import colors from '../theme/colors';
 
 export default function LoginScreen() {
   const navigation = useNavigation();
+  const { checkIfRegistered } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [checking, setChecking] = useState(false);
 
-  const handleLogin = () => {
-    if (phoneNumber.length !== 10) return;
-    navigation.navigate('PhoneVerification', { phoneNumber });
+  const handleLogin = async () => {
+    if (phoneNumber.length < 9) return;
+    setChecking(true);
+    try {
+      const isRegistered = await checkIfRegistered(phoneNumber);
+      if (!isRegistered) {
+        Alert.alert(
+          'לא רשום במערכת',
+          'מספר הטלפון הזה לא רשום. יש להירשם קודם כדי להתחבר.',
+          [
+            { text: 'אישור' },
+            { text: 'הירשם עכשיו', onPress: () => navigation.navigate('Register') },
+          ]
+        );
+        return;
+      }
+      navigation.navigate('PhoneVerification', { phoneNumber });
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -58,13 +80,18 @@ export default function LoginScreen() {
             keyboardType="phone-pad"
             maxLength={10}
           />
-          {phoneNumber.length === 10 && (
+          {phoneNumber.length >= 9 && (
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, checking && styles.primaryButtonDisabled]}
               onPress={handleLogin}
+              disabled={checking}
               activeOpacity={0.85}
             >
-              <Text style={styles.primaryButtonText}>התחבר</Text>
+              {checking ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>התחבר</Text>
+              )}
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -171,6 +198,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   registerLink: {
     flexDirection: 'row',
