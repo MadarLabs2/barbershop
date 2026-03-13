@@ -57,6 +57,16 @@ barbershop/
 2. **צפייה בתורים**: עבור ל"התורים שלי" כדי לראות את כל התורים
 3. **ביטול תור**: פתח פרטי תור ולחץ על "בטל תור"
 
+## WhatsApp (קודי התחברות)
+
+לשליחת קודי OTP אוטומטית ב-WhatsApp, השתמש בשירות whatsapp-web.js:
+
+```bash
+cd whatsapp && npm install && node service.js
+```
+
+סרוק את ה-QR ב-WhatsApp, והגדר `EXPO_PUBLIC_WHATSAPP_SERVICE_URL` ב-.env (ראה `docs/WHATSAPP_SETUP.md`).
+
 ## פתרון בעיות
 
 ### שגיאת "EMFILE: too many open files"

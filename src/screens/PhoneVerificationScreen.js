@@ -44,7 +44,7 @@ export default function PhoneVerificationScreen() {
     } catch (e) {
       Alert.alert(
         'שגיאה',
-        'לא הצלחנו ליצור קוד. ודאו שהטבלה otp_requests קיימת ב-Supabase (הריצו את migration_otp.sql).'
+        'לא הצלחנו ליצור קוד. ודאו ששירות WhatsApp פועל (node whatsapp/service.js) או שהטבלה otp_requests קיימת ב-Supabase.'
       );
     } finally {
       setLoading(false);
